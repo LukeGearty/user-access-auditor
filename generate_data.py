@@ -148,6 +148,8 @@ def build_user(user_id: int, employment_type: str = "employee", edge_case: str =
         last_login   = None
         risk_notes   = "Account has never logged in since creation"
 
+
+    # TODO: Add better full_name, email and manager to bring consistency across the dataset
     return {
         "user_id":           f"U{str(user_id).zfill(3)}",
         "full_name":         fake.name(),
@@ -209,16 +211,5 @@ def generate_dataset() -> pd.DataFrame:
     df = pd.DataFrame(records)
 
     df = df.sample(frac=1, random_state=42).reset_index(drop=True)
-
-    return df
-
-
-if __name__ == "__main__":
-    print("Generating Access Review dataset...\n")
-    df = generate_dataset()
     df.to_csv("user_access_data.csv", index=False)
-
-
-    print("\nSample records:")
-    print(df[["user_id", "full_name", "department", "employment_type",
-              "account_status", "access_level", "last_login_date", "risk_notes"]].head(10).to_string(index=False))
+    return df
