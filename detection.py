@@ -3,6 +3,7 @@
 Building detection rules as its own function
 
 """
+from generate_data import generate_dataset
 import pandas as pd
 
 
@@ -118,3 +119,119 @@ def find_permission_creep(df, threshold: int = 5) -> pd.DataFrame:
     )
 
     return flagged
+
+
+"""
+Ratings
+Dormant Account: 2
+Ghost Accounts: 3
+Inactive Contractor: 3
+Elevated privileges: 2
+Admin privileges: 4
+Disabled: 4
+Permission Creep: 2
+
+
+
+Score   Risk
+
+1-2     Low
+
+3-4     Medium
+
+5-7     High
+
+8+      Critical
+
+
+"""
+
+
+def calculate_risk_reasons(df: pd.DataFrame) -> pd.DataFrame:
+    
+    weights = {
+        "dormant": 2,
+        "ghost": 3,
+        "inactive_contractor": 3,
+        "elevated": 2,
+        "admin": 4,
+        "disabled_with_access": 4,
+        "permission_creep": 2
+    }
+
+    dormant = find_dormant_accounts(df)
+    contractors = find_inactive_contractors(df)
+    privileged = find_privileged_accounts(df)
+    disabled = find_disabled_with_access(df)
+    creep = find_permission_creep(df)
+
+    # aggregation 
+
+    users = {}
+
+    # key = user_id
+
+    # helper function to score by risk_reason
+    def get_score(risk_reason: str) -> int:
+        if "ghost" in risk_reason.lower():
+            return weights["ghost"]
+        elif "dormant" in risk_reason.lower():
+            return weights["dormant"]
+        elif "contractor" in risk_reason.lower():
+            return weights["inactive_contractor"]
+        elif "admin account" in risk_reason.lower():
+            return weights["admin"]
+        elif "disabled" in risk_reason.lower() or "suspended" in risk_reason.lower():
+            return weights["disabled_with_access"]
+        elif "permission creep" in risk_reason.lower():
+            return weights["permission_creep"]
+        
+        return 0
+    
+
+    all_flagged = pd.concat([dormant,contractors,privileged,disabled,creep])
+
+
+    for _, row in all_flagged.iterrows():
+        uid = row["user_id"]
+
+        if uid not in users:
+            users[uid] = {
+                "user_id": uid,
+                "full_name": row["full_name"],
+                "department": row["department"],
+                "employment_type": row["employment_type"],
+                "account_status": row["account_status"],
+                "access_level": row["access_level"],
+                "last_login_date": row["access_level"],
+                "risk_score": 0,
+                "risk_reasons": [],
+            }
+    
+        users[uid]["risk_score"] += get_score(row["risk_reason"])
+
+        users[uid]["risk_reasons"].append(row["risk_reason"])
+    
+    findings_df = pd.DataFrame(users.values())
+
+    findings_df["risk_reasons"] = findings_df["risk_reasons"].apply(
+        lambda x: " | ".join(x)
+    )
+
+    # helper function to assign the overall rating
+
+    def assign_tier(score: int) -> str:
+        if score >= 8:
+            return "Critical"
+        elif score >= 5:
+            return "High"
+        elif score >= 3:
+            return "Medium"
+        else:
+            return "Low"
+        
+    findings_df["severity_tier"] = findings_df["risk_score"].apply(assign_tier)
+
+    findings_df = findings_df.sort_values("risk_score", ascending=False).reset_index(drop=True)
+
+    return findings_df
